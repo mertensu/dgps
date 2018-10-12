@@ -1,0 +1,173 @@
+---
+title: "Bayes factor tutorial"
+output:
+  html_notebook:
+    highlight: tango
+    number_sections: no
+    theme: spacelab
+    toc: yes
+    toc_float: yes
+---
+
+# A little tutorial on the Bayes factor
+
+In this notebook, we try to deepen the understanding of what a Bayes factor is and how it is computed.
+
+**Our goal**:  To test whether a coin is fair or not by computing a Bayes factor.
+
+**Procedure**: We flipped the coin 10 times and it came up heads 9 times. 
+
+**Model 0 ($H_{0}$)**: The coin is fair ($\theta = 0.5$)
+
+**Model 1 ($H_{1}$)**: The coin is not fair ($\theta \neq 0.5$)
+
+## Bayes formula
+
+The bayes formulas for both models can be written as:
+
+
+$$ p(M1|D) = \frac{p(M1)p(D|M1)}{p(D)} $$
+
+Where 
+
+* $p(M1|D)$ is the posterior probability of Model 1 given the data.
+* $p(M1)$ is the prior probability of Model 1 before seeing any data.
+* $p(D|M1)$ is the probability of the data given that Model 1 is true.
+* $p(D)$ is the marginal likelihood.
+
+and
+
+$$
+p(M0|D) = \frac{p(M0)p(D|M0)}{p(D)}
+$$
+
+## Marginal Likelihood
+
+$p(D)$ is an average likelihood where we compute the likelihood for each model under consideration weighted by the probability of that model and sum everything up. Therefore, $p(D)$ can also be written as:
+
+$$
+p(D) = p(M1)p(D|M1) + p(M0)p(D|M0)
+$$
+
+## The Bayes factor
+
+Let's rearrange both formulas above to get a ratio of posterior model probabilities.
+
+$$
+\frac{p(M1|D)}{p(M0|D)} = \frac{p(M1)}{p(M0)}\frac{p(D|M1)}{p(D|M0)}
+$$
+
+where
+
+* $\frac{p(M1|D)}{p(M0|D)}$ is the ratio of posterior model probabilities given the data.
+
+* $\frac{p(M1)}{p(M0)}$ is the ratio of prior model probabilities.
+
+* $\frac{p(D|M1)}{p(D|M0)}$ is the updating factor, also called **Bayes factor**.
+
+
+
+## Computing the Bayes factor
+
+### Model 0 ($H_{0}$)
+
+We start with Model 0 ($H_{0}$). 
+
+Our prior assumption about the coin was that it is a fair coin, so $p(\theta|M0)$ = 0.5 
+
+If we write $p(D|M0) out, we get:
+
+$$
+p(D|M0) = \int_{0}^{1}p(D|M0,\theta)p(\theta|M0) 
+$$
+
+This means that we have to compute the likelihood for each possible value of $\theta$. Here, our prior distribution
+is a point hypothesis so we only assume one value of $\theta$, namely 0.5.
+
+The likelihood function for the coin-toss example is:
+
+$$
+p(d|M0,\theta) = \binom{n}{k} \cdot \theta^k(1-\theta)^{n-k}
+$$
+
+If we plug our data and the value for $\theta$ in, we get:
+
+$$
+p(d|M0,\theta) = \binom{10}{9} \cdot 0.5^9(0.5)^{1} = 0.0097
+$$
+
+```{r}
+binom_lik = function(theta) return(choose(10,9) * theta^9 * (1-theta)^1)
+(ml_m0 = binom_lik(0.5))
+```
+
+
+### Model 1 ($H_{1}$)
+
+Our prior assumption about the coin was that it is not! a fair coin, so our prior beliefs might be captured
+via a beta distribution:
+
+$$
+p(\theta) = beta(2,2)
+$$
+
+```{r,echo=F}
+x = seq(0,1,length.out = 100)
+plot(x,dbeta(x,2,2),type='l')
+```
+
+We can compute the marginal likelihood $p(D|M1)$ by sampling multiple values from this prior distribution and plugging those sampled values in the likelihood function.
+
+```{r}
+
+ml_sum = 0
+N = 100000
+for(i in 1:N){
+  theta = rbeta(n = 1, 2, 2)
+  ml_sum = ml_sum + binom_lik(theta)
+}
+
+(ml_m1 = ml_sum/N)
+
+```
+
+All that is left to do is compute the actual Bayes factor:
+
+```{r}
+(BF10 = ml_m1 / ml_m0)
+```
+
+We see that the data are about 9.2 times more likely under Model 1 than Model 0.
+
+## Savage-Dickey Density Ratio
+
+There is another simple way to get Bayes factors for nested model comparisons where one model fixes the parameter at a prespecified value, the so called Savage-Dickey method.
+
+The Savage-Dickey method simply states that one can compare the height of the posterior distribution with the height of the prior distribution at the parameter value of interest.
+
+```{r,echo=F}
+N = 10
+k = 9
+alpha = 2
+beta = 2
+alpha_star = alpha + k 
+beta_star = beta + N - k
+x = seq(0,1,length.out = 1000)
+plot(x,dbeta(x,alpha_star,beta_star),type='l')
+lines(x,dbeta(x,alpha,beta))
+abline(v=0.5,col='red')
+points(0.5,dbeta(0.5,alpha,beta),pch=19)
+points(0.5,dbeta(0.5,alpha_star,beta_star),pch=19)
+#text(0.48,1.2,labels='1')
+#text(0.45,0.4,labels='0.1074')
+```
+
+The ratio of the two values is the Bayes factor
+
+```{r}
+density_prior = dbeta(0.5,alpha,beta)
+density_post = dbeta(0.5,alpha_star,beta_star)
+(BF10 = density_prior/density_post)
+```
+
+

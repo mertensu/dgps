@@ -1,0 +1,366 @@
+---
+title: "The tidyverse"
+output:
+  html_notebook:
+    highlight: tango
+    number_sections: yes
+    toc: yes
+    toc_float: no
+---
+
+
+
+The `tidyverse` is "a collection of R packages designed for data analysis" 
+(see [https://www.tidyverse.org/](https://www.tidyverse.org/)). Here, we will focus on one of those packages, namely `dplyr`. `dplyr` is "a grammar of data manipulation, providing a consistent set of verbs that help you solve the most common data manipulation challenges" (see [https://dplyr.tidyverse.org/](https://dplyr.tidyverse.org/)). We think that `dplyr` is able to (at least in part) replace some basic R commands and make several tasks a lot easier. Some researchers even think that one should start teaching `dplyr` from the very start ([http://varianceexplained.org/r/teach-tidyverse/](http://varianceexplained.org/r/teach-tidyverse/)). We agree with this view! 
+
+If you encounter any problems, feel free to contact me:    
+<span style='color:blue'>ulf.mertens@psychologie.uni-heidelberg.de</span>
+
+`dplyr` mainly consists of six verbs where each verb is optimized for a specific task.
+
+* `mutate` adds new variables that are functions of existing variables
+* `select` picks variables based on their names.
+* `filter` picks cases based on their values.
+* `summarise` reduces multiple values down to a single summary.
+* `arrange` changes the ordering of the rows.
+* `group_by` allows to perform any operation “by group”.
+
+```{r}
+packs = c('tidyverse')
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(packs,update=F,character.only = T)
+```
+
+Check the package versions:
+
+```{r}
+packageVersion('tidyverse')
+```
+
+Load and take a look at the dataset:
+_These contrived repeated-measures data are taken from O'Brien and Kaiser (1985). The data are from an imaginary study in which 16 female and male subjects, who are divided into three treatments, are measured at a pretest, postest, and a follow-up session; during each session, they are measured at five occasions at intervals of one hour. The design, therefore, has two between-subject and two within-subject factors._
+
+```{r}
+df = read.csv('../data/obk_long.csv')
+head(df)
+```
+
+# dplyr
+
+## The pipe operator (%>%)
+
+`dplyr` has a special syntax that allows to transfer objects or functions. This might seem strange at first but you'll soon notice the benefits. The pipe operator can easily be generated without typing it all the time by executing Cmd+Shift+Enter (Mac) or Strg+Shift+Enter (Windows).
+
+```{r}
+df %>% dim() # dplyr syntax: take df and transfer it to the function named dim() 
+dim(df)      # usual syntax
+```
+
+## select
+
+Columns can be accessed by name or position using `select`. Note that I use an additional `head(3)`. This is only to limit the output to only 3 rows so that the notebooks stays clearer.
+
+```{r}
+df %>% select(treatment) %>% head(3)
+```
+
+```{r}
+df %>% select(2) %>% head(3)
+```
+
+```{r}
+df %>% select(treatment, gender) %>% head(3)
+```
+
+All columns except `phase`:
+
+```{r}
+df %>% select(-phase) %>% head(3)
+```
+
+Access all columns from `gender` to `phase`.
+
+```{r}
+df %>% select(gender:phase) %>% head(3)
+```
+
+## filter/slice
+
+We can access specific rows of the dataset using `filter` or `slice`. Whereas `filter` expects a logical expression as input, `slice` can be used with row indices.
+
+```{r}
+df_m = df %>% filter(gender=='M') 
+```
+
+```{r}
+df %>% filter(age < 0) %>% head(3)
+```
+
+
+```{r}
+df %>% filter(phase != 'pre') %>% count(phase)
+```
+
+```{r}
+df %>% slice(3)
+```
+
+```{r}
+df %>% slice(c(3,4,5))
+```
+
+
+Get all rows except the first row.
+
+```{r}
+df %>% slice(-1) %>% head(3)
+```
+
+
+## mutate
+
+With `mutate`, we can generate new columns based on existing ones.
+
+```{r}
+df %>% mutate(new = 1) %>% head(3)
+```
+
+
+Standardise the mean centered column `age` by dividing with the standard deviation of `age`.
+
+```{r}
+df %>% mutate(age_z = age/sd(age)) %>% head(3)
+```
+
+If we want to save the dataset with a new column, we should store the result:
+
+```{r}
+df2 = df %>% mutate(age_z = age/sd(age))
+head(df2,3)
+```
+
+## arrange
+
+`arrange` make it very easy to sort a data frame by one or more columns.
+
+By default, a column is arranged in ascending order:
+
+```{r}
+df %>% arrange(age) %>% tail(5)
+```
+
+We can sort in descending order also:
+
+```{r}
+df %>% arrange(desc(age)) %>% head(5)
+```
+
+Sorting by multiple columns...
+
+```{r}
+df %>% arrange(age,value) %>% head(5)
+```
+
+## summarise
+
+`summarise` lets you compute statistics of one or more columns and returns a dataframe.
+
+```{r}
+df %>% summarise(Mean_Age = mean(age), SD_Age = sd(age), XYZ = median(value))
+```
+
+## group_by
+
+You can combine all functions shown above with `group_by`. 
+
+Let's compute the standard deviation of `age` grouped by gender.
+
+```{r}
+df %>% group_by(gender, phase) %>% 
+  summarise(SD_Age = sd(age), Med_Value = median(value))
+```
+
+What is the median of column `value`, grouped by `gender` and `treatment`.
+
+```{r}
+df %>% group_by(gender,treatment) %>% summarise(Med = median(value))
+```
+
+We can also easily compute the mean of column `value` for each participant and append it to the dataframe. As you see, the mean for each participant is automatically repeated for the number of measurements. 
+
+```{r}
+df %>% group_by(id) %>% mutate(Mean_Value = mean(value)) %>% head(3)
+```
+
+Finally, there are some special functions we can use. For instance, we get the first row grouped by `id` using `row_number()`.
+
+```{r}
+df %>% group_by(id) %>% filter(row_number() < 2)
+```
+
+
+# tidyr
+
+`tidyr` is especially useful to change the format of a dataset, either from wide to stacked-format, or vice versa. In stacked format, there is one row for each measurement. In wide-format, there is one column for each measurement. With repeated measurements, both format can be used to represent data. In SPSS, running a RM-ANOVA requires the data to be in wide-format wheres in R, the data should be in stacked format.
+
+## spread
+
+With `spread`, we can convert the dataframe from stacked to wide-format.
+
+```{r}
+df_stacked = df %>% group_by(id,phase) %>% summarise(Mean_Value = mean(value))  
+head(df_stacked)
+```
+
+
+```{r}
+df_wide = df_stacked %>% spread(phase,Mean_Value)
+head(df_wide)
+```
+
+
+## gather
+
+`gather` does the opposite, converting from wide to stacked-format. We name the column that stores the levels as `Phase`, the column that contains the actual number as `Value` and tell the function what columns (`fup` until `pre`) should be converted.
+
+```{r}
+df_wide %>% gather(Phase,Value,fup:pre) %>% head(5)
+```
+
+We should arrange by `id` to make the dataset look like before.
+
+```{r}
+df_wide %>% gather(Phase,Value,fup:pre) %>% arrange(id) %>% head(5)
+#df_wide %>% gather_('Phase','Value',c('fup','post','pre')) %>% arrange(id) %>% head(5)
+```
+
+## separate and unite
+
+With `unite`, you can concatenate two columns. Use `separate` to separate two columns. Both can be quite useful if used together with `gather`/`spread`. 
+
+Imagine we want to convert the original dataframe to wide-format. Note that we have two within-subjects factors, `phase` and `hour`. In section 1.2.1, we only converted the column `phase` to wide format. Therefore, the resulting dataframe still contained the measurement of `value` for each `hour`. we can use `unite` to get the real wide-format.
+
+```{r}
+df %>% unite(phase_hour, phase, hour) %>% head()
+df %>% unite(phase_hour, phase, hour) %>% spread(phase_hour,value) %>% head()
+```
+
+# ggplot2
+
+`ggplot2` is probably one of the most popular packages in R. It is used to visualise data. See [https://ggplot2.tidyverse.org/](https://ggplot2.tidyverse.org/).
+
+## The body
+
+Every plot starts with the information about the dataset that contains the columns to plot and the information about the axes of the plot. Here, we tell `ggplot2` to display `treatment` on the x-axis, `value` on the y-axis and that both variables can be found in `df`. Note that nothing is shown at the moment, except for both axes.
+
+```{r}
+my_plot = ggplot(df,aes(x=treatment,y=value))
+print(my_plot)
+```
+
+## geom_boxplot
+
+The general idea of ggplot is to add layers to a plot. In our example, we have one factor variable and one metric variable which is why we have the option to e.g. show the data as a boxplot.
+
+```{r}
+my_plot + geom_boxplot() 
+```
+
+Now what if we want to split each treatment level into male and female participants. This can be done using the group aesthetic.
+
+```{r}
+my_plot + geom_boxplot(aes(fill=gender))
+```
+
+Changing the default colours can be done using the `scale_fill_manual`.
+
+```{r}
+my_plot + 
+    geom_boxplot(aes(fill=gender)) + 
+    scale_fill_manual(values=c('lightgrey','black')) +
+    theme_classic()
+```
+
+If you want to change the colour of the surrounding box instead, the code would be:
+
+```{r}
+my_plot + geom_boxplot(aes(colour=gender)) + 
+  scale_colour_manual(values=c('lightgrey','black'))
+```
+
+## geom_point
+
+We create a new dataset first:
+
+```{r}
+df2 = df %>% group_by(id) %>% 
+  mutate(Value = mean(value)) %>% 
+  distinct(id,.keep_all = T)
+
+head(df2)
+```
+
+```{r}
+my_plot2 = ggplot(df2,aes(x=age,y=Value))
+print(my_plot2)
+```
+
+```{r}
+my_plot2 + geom_point()
+```
+
+We can change the colour by `gender`.
+
+```{r}
+my_plot2 + geom_point(aes(pch=gender))
+```
+
+We can add a linear regression line to the plot...
+
+```{r}
+my_plot2 + geom_point() + geom_smooth(method='lm',se=FALSE)
+```
+
+or even two separate regression lines per gender...
+
+```{r}
+my_plot2 + geom_point(aes(colour=gender)) + 
+  geom_smooth(aes(colour=gender),method='lm',se=F)
+```
+
+
+## geom_histogram
+
+```{r}
+my_plot3 = ggplot(df2,aes(x=Value))
+my_plot3 + geom_histogram()
+```
+
+```{r}
+my_plot3 + geom_histogram(binwidth=1,colour='black',fill='darkgrey')+
+theme_classic()
+```
+
+
+## facet plots
+
+Sometimes we want to generate separate plots for each level of a grouping variable. This can be done using either `facet_wrap` or `facet_grid`.
+
+Say we want a histogram of `value`, separated by `gender`.
+
+```{r}
+my_plot4 = ggplot(df2,aes(x=value))
+```
+
+```{r}
+my_plot4 + geom_histogram(binwidth = 1,colour='black') + 
+    facet_wrap(~gender)
+```
+
+Separate also by `treatment`.
+
+```{r}
+my_plot4 + geom_histogram(binwidth = 1,colour='black') + 
+  facet_grid(treatment~gender)
+```
+

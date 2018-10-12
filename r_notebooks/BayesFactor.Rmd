@@ -1,0 +1,408 @@
+---
+title: "The BayesFactor package"
+output:
+  html_notebook:
+    highlight: tango
+    number_sections: yes
+    toc: yes
+    toc_float: no
+---
+
+
+
+The `BayesFactor` package enables easy computation of Bayes Factors for commonly used statistical tests suchs as t-test, ANOVA or linear regression. In this notebook, we will show you how to run both the frequentist and the bayesian version of the above mentioned tests using R.
+
+If you encounter any problems, feel free to contact me:    
+<span style='color:blue'>ulf.mertens@psychologie.uni-heidelberg.de</span>
+
+Before we start, here is a suggestion by Harold Jeffreys (1961) on how to paraphrase the Bayes factor. <span style='color:red'>Please use these suggestions only to get a sense of the size, don't use it as cutoff-values as we use the p-value.</span>
+
+See also:
+[http://www.nicebread.de/what-does-a-bayes-factor-feel-like/](http://www.nicebread.de/what-does-a-bayes-factor-feel-like/)
+
+and here:
+[http://andrewgelman.com/2015/01/27/zillion-people-pointed-xkcd-cartoon/](http://andrewgelman.com/2015/01/27/zillion-people-pointed-xkcd-cartoon/)
+
+Bayes factor $BF_{10}$  | Label
+------------- | -------------
+> 100 | Extreme evidence for H1
+30 – 100 |Very strong evidence for H1
+10 – 30 |Strong evidence for H1
+3 – 10 |Moderate evidence for H1
+1 – 3 |Anecdotal evidence for H1
+1 |No evidence
+1/3 – 1 |Anecdotal evidence for H0
+1/3 – 1/10 |Moderate evidence for H0
+1/10 – 1/30 |Strong evidence for H0
+1/30 – 1/100 |Very strong evidence for H0
+< 1/100 |Extreme evidence for H0
+
+Load necessary packages
+
+```{r}
+packs = c('car','tidyverse','jmv','afex','emmeans','BayesFactor','HDInterval','mlbench', 'broom')
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(packs,update=F,character.only = T)
+```
+
+```{r}
+for(p in packs) print(paste0(p, ' version: ',packageVersion(p)))
+```
+
+
+Load and take a look at the dataset:
+
+_These contrived repeated-measures data are taken from O'Brien and Kaiser (1985). The data are from an imaginary study in which 16 female and male subjects, who are divided into three treatments, are measured at a pretest, postest, and a follow-up session; during each session, they are measured at five occasions at intervals of one hour. The design, therefore, has two between-subject and two within-subject factors._
+
+```{r}
+df = read.csv('../data/obk_long.csv')
+head(df)
+```
+
+# t-test
+
+## independent samples
+
+The independent samples t-test can be used to test whether there is a statistically significant difference between the means of two unrelated groups.
+
+$$ H_{0}:  \mu_{1} = \mu_{2} $$
+
+### frequentist
+
+In order to show to use the independent samples t-test on the dataset loaded above, we have to make sure that each row corresponds to only one participant. Currently however, we have multiple measurements for each participant. Let's see how to process the dataset:
+
+```{r}
+df_sub1 = df %>% 
+    group_by(id) %>% # groupy by id
+    mutate(dv = mean(value)) %>% # compute new column 
+    distinct(id,.keep_all = T) %>% # get only distinct ids
+    data.frame()
+
+head(df_sub1)
+```
+
+Run the `ttestIS` function. See [https://www.jamovi.org/jmv/ttestis.html](https://www.jamovi.org/jmv/ttestis.html) for further information about the function.
+
+```{r}
+ttestIS(data=df_sub1,
+        vars = 'dv',
+        group = 'gender',
+        desc = T,
+        eqv=T,
+        effectSize = T)
+```
+
+### bayesian
+
+Let us now see how the same t-test can be run using bayesian methods via the `BayesFactor` package. The function is based on the paper by Rouder and collegues [https://www.ncbi.nlm.nih.gov/pubmed/19293088](https://www.ncbi.nlm.nih.gov/pubmed/19293088). 
+
+$$ H_{0}: \delta = 0 $$
+$$ H_{1}: \delta  \sim Cauchy(scale=0.707) $$
+
+with $\delta$ meaning the effect size of Cohen's *d*.
+
+```{r}
+(bf = ttestBF(formula=dv ~ gender,data=df_sub1))
+```
+
+Here we see that the alternative hypothesis ($H_{1}$) is 0.564 times more likely than $H_{0}$. We can revert the Bayes factor to see how much more likely $H_{0}$ is compared to $H_{1}$.
+
+```{r}
+1/bf
+```
+
+You should always consider running a robustness check. We would like to see similar results even when the scale of the prior distribution changes:
+
+```{r}
+prior_scales = seq(0.1,1,by = 0.05)
+bfs = vector('numeric',length=length(prior_scales))
+for(i in seq_along(prior_scales)){
+  bfs[i] = ttestBF(formula=dv ~ gender,data=df_sub1,rscale = prior_scales[i])
+}
+
+plot(prior_scales,1/bfs,type='l')
+
+```
+
+
+
+We can have access to the actual samples from the posterior distributions of the parameters by calling the `posterior` function on the BF object.
+
+```{r}
+post_chains = posterior(bf,iterations = 5000)
+summary(post_chains)
+```
+
+* `mu`= grand mean
+* `beta`= $mu_{F}$ - $mu_{M}$
+* `sig2`= pooled variance
+* `delta`= effect size
+
+$$ delta = \frac{beta}{\sqrt{sig2}} $$
+
+Let's take a look at the posterior distribution of the effect size $\delta$ and plot the 95% highest density interval as two vertical lines using the `hdi` function from package `HDInterval`. You see that the HDI includes the 0 which is another sign for us to stay with $H_{0}$.
+
+```{r}
+post_samples = data.frame(post_chains[,1:4])
+dim(post_samples)
+hdint = hdi(post_samples$delta)
+ggplot(post_samples,aes(x=delta)) + 
+    geom_histogram() + 
+    geom_vline(xintercept = hdint[1],color='red')+
+    geom_vline(xintercept = hdint[2],color='red')+
+    theme_classic()
+```
+
+## paired samples
+
+The paired samples t-test can be used when we want to compare two related groups. We test whether the difference in means differs significantly from zero.
+
+$$H_{0}: \mu_{d} = 0 $$
+
+where *d* stands for *difference*. 
+
+Note that instead of running a paired samples t-test, we could instead compute all pairwise differences and run a one-sample t-test to check if the difference scores differ from 0.
+
+### frequentist
+
+Here, we can't use the original dataset *df* either because the function `ttestPS` assumes the data to be in wide-format which means that every measurement should be stored in a separate column. However, *df* is in long-format. Also, there are two within-subjects factors both with 3 groups *phase*: (pre, post, follow-up) and *hour* (1 - 5). 
+
+Let's bring the data into the right format and pick only pre-test and follow-up test. This is off-topic so feel free to just skip over this part.
+
+```{r}
+df_sub2 = df %>% 
+    group_by(id,phase) %>% 
+    summarise(dv=mean(value)) %>% 
+    spread(phase,dv)
+head(df_sub2)
+```
+
+Run the `ttestPS` function. See [https://www.jamovi.org/jmv/ttestps.html](https://www.jamovi.org/jmv/ttestps.html) for further information about the function.
+
+```{r}
+ttestPS(data=df_sub2, 
+        pairs = list(list(i1 = 'pre', i2 = 'post')),
+        effectSize =T,
+        desc=T)
+```
+
+### bayesian
+
+As with the independent samples t-test, using the `BayesFactor` package for the paired t-test is super easy. Since we access the relevant columns directly, there is no need for the `data` argument.
+
+```{r}
+ttestBF(x=df_sub2$pre,y=df_sub2$post,paired=T)
+```
+
+The Bayes factor states that $H_{1}$ is 7.7 more likely than $H_{0}$ which can be interpreted as substantial support for $H_{1}$.
+
+# ANOVA
+
+In this section, you will see how to compute Bayes factors for factorial designs. For all "frequentist ANOVAs", we use the `afex` package.
+
+## One-way between-subjects
+
+The one-way ANOVA with only one between-subjects factor is the simplest extension of the independent samples t-test where you have more than two levels of a factor.
+
+### frequentist
+
+`afex` lets you test all kind of designs using a very straightforward syntax. As you'll see below, testing solely between-subjects designs even if the data are stored in long-format is not a problem. We only get a warning message stating: _More than one observation per cell, aggregating the data using mean_, which tells us that we probably have one or more within-subject factors in our data.
+
+```{r}
+(fit01f = aov_ez(dv='value',between='treatment',id='id',data=df))
+```
+
+
+The Anova Table shows tests the main effect of `treatment` and displays numerator and denominator degrees of freedom, the mean square error (MSE), the F value, $\eta_{g}^{2}$, and the corresponding p-value.
+
+`afex` automatically reshapes the data into wide-format:
+
+```{r}
+head(fit01f$data$wide)
+```
+
+
+In the newest version of `afex`, it is now possible to plot the results using `afex_plot`:
+
+```{r}
+afex_plot(fit01f,x='treatment',data_plot=F,error_ci=F)+
+  theme_classic()
+```
+
+
+### bayesian
+
+Notice that `anovaBF` is not able to aggregate the data in order to fit the correct model. In order to be able to compare the above analysis with the respective bayesian analysis, we need to pass the data in wide-format to the `anovaBF` function.
+
+```{r}
+(fit01b = anovaBF(.~treatment,data=fit01f$data$wide))
+```
+
+Let's take a look at the MCMC chains and the parameters of the ANOVA model.
+
+```{r}
+post_chains = posterior(fit01b,iterations=5000)
+summary(post_chains)
+```
+
+We can recover the parameters shown in the output above. The parameters (`treatment-control`, `treatment-A`, `treatment-B`) are standardized effects whereas `mu` is the grand mean.
+
+The cell means can be recovered with:
+
+$$ mu_{control} = \texttt{mu}  + (\texttt{treatment-control} * \sqrt{\texttt{sig2}}) $$
+$$ mu_{A} = \texttt{mu}  + (\texttt{treatment-A} * \sqrt{\texttt{sig2}}) $$
+$$ mu_{B} = \texttt{mu}  + (\texttt{treatment-B} * \sqrt{\texttt{sig2}}) $$
+
+## One-way within subjects
+
+### frequentist
+
+Using `afex`, we only have to switch from the `between` to the `within` argument. The Greenhouse-Geisser correction for the violation of sphericity is applied by default. We will use `phase` as the only within-subjects factor.
+
+```{r}
+(fit02f = aov_ez(dv='value',within='phase',id='id',data=df))
+```
+
+There is a significant main effect of `phase`. We run pairwise comparisons to see which of the 3 groups (pre, post, fup) really differ from each other. First, we generate the reference grid which simply displays all cell means (column `emmean`)
+
+```{r}
+(ref_grid = emmeans(fit02f,~phase))
+```
+
+Next, we run the `pairs` function to compute all pairwise comparisons using the default tukey adjustment. You see that the pretest measurement differs significantly from both posttest and follow-up test. However, pretest and follow-up test don't differ.
+
+```{r}
+pairs(ref_grid)
+```
+
+With `afex_plot`, it is also possible to display within-subject error bars:
+
+```{r}
+afex_plot(fit02f,x='phase',error='within',data_plot=F,error_ci = F)+
+  theme_classic()
+```
+
+
+### bayesian
+
+As already seen, in order to run the same analysis using `anovaBF`, you need to make sure that the data is already aggregated.
+
+```{r}
+df_wide = df %>% group_by(id,phase) %>% summarise(value=mean(value))
+head(df_wide)
+```
+
+One special thing you have to keep in mind when running within-subject ANOVAs using the `BayesFactor` package is that you need don't really conduct a within-subjects ANOVA but rather a linear mixed-effects models. Therefore, you have to add the subject identifier column (here named `id`) as an additional predictor variable. Also, you have to specify that `id` is a random factor. 
+
+```{r}
+df_wide$id = factor(df_wide$id)
+(fit02b = anovaBF(value ~ phase + id, whichRandom = 'id',data=df_wide))
+```
+
+Let's see the parameters underlying the model. Here, we draw the posterior samples and convert everything to a dataset (see below). 
+
+```{r}
+chaindf = data.frame(posterior(fit02b,iterations = 5000))
+head(chaindf)
+```
+
+What if we want to take a look at the posterior distribution of the difference of follow-up-test and post-test?
+
+Well, we can generate this distribution by using the formula above.
+
+```{r}
+chaindf = chaindf %>% mutate(fup_mean = chaindf$mu  + (chaindf$phase.fup * sqrt(chaindf$sig2)),
+                            post_mean = chaindf$mu  + (chaindf$phase.post *sqrt(chaindf$sig2)),
+                            fup_vs_post = fup_mean - post_mean)
+```
+
+
+And plot the posterior. The HDInterval comes to the same conclusion (no difference since 0 is inside the 95% credible interval) as the post-hoc test for the frequentist ANOVA.
+
+```{r}
+hdint = hdi(chaindf$fup_vs_post)
+ggplot(chaindf,aes(x=fup_vs_post)) + 
+    geom_histogram(colour='black') + 
+    geom_vline(xintercept = hdint[1],color='red')+
+    geom_vline(xintercept = hdint[2],color='red')+
+    theme_classic()
+```
+
+
+## mixed design
+
+### frequentist
+
+```{r}
+(fit03f = aov_ez(dv='value',between='treatment',within='phase',id='id',data=df))
+```
+
+We can plot the results using `afex_plot` again.
+
+```{r}
+afex_plot(fit03f, x='phase',trace='treatment',error_ci=F,data_plot=F,error='within') + 
+  theme_classic()
+```
+
+We might be interest in whether participants from treatment A at post-test differ from participants from treatment B at follow-up test time.
+
+```{r}
+(ref_grid = emmeans(fit03f,~treatment + phase))
+```
+
+We specify a contrast. Look at where the relevant rows in the reference grid are. Here, it is row 3 (`B fup`) and row 5 (`control post`). You don't have to remember the exact syntax. Just copy-paste the next time you want to use it.
+
+```{r}
+k = c(0,0,1,0,-1,0,0,0,0)
+contrast(ref_grid,list(my_contrast = k))
+```
+
+### bayesian
+
+First, prepare the dataset:
+
+```{r}
+df_wide2 = df %>% group_by(id,phase,treatment) %>% summarise(value=mean(value))
+head(df_wide2)
+```
+
+```{r}
+df_wide2$id = factor(df_wide2$id)
+(fit03b = anovaBF(value ~ phase*treatment + id, whichRandom = 'id',data=df_wide2))
+```
+
+As you see, every possible model is compared to the null-model (the one with only `id`). The full model with `phase` and `treatment` as main effect as well as the interaction is the favored one since it has the highest Bayes factor compared to the 'id-only-model'. 
+
+What if you are interested in the Bayes factor for the comparison of the main-effects only model and the model with an additional interaction term? Well, there are two options:
+
+**Option 1** - using `whichModels = top`
+
+`whichModels = top` starts with the full model and displays the Bayes factors if each term is omitted. So, a small Bayes factor (< 1) means that the model with the ommited term is worse than the full model. In the output below, you see that if we omit the interaction, the model becomes much worse.
+
+```{r}
+(bf = anovaBF(value ~ phase*treatment + id, whichRandom = 'id',whichModels = 'top',data=df_wide2))
+```
+
+How much more likely is the model with the interaction included than the main-effects only model:
+
+```{r}
+1/bf[1] # ~ 17 times more likely
+```
+
+**Option 2**
+
+We specify two models and compare them using `lmBF`. Both models only differ by the interaction term. We can divide two models using the usual `/` symbol.
+
+```{r}
+maineffects = lmBF(value~treatment + phase + id, whichRandom = 'id',data=df_wide2)
+interaction = lmBF(value~treatment * phase + id, whichRandom = 'id',data=df_wide2)
+interaction / maineffects
+```
+
+
+
+
+
+
+
+

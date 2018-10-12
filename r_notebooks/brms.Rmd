@@ -1,0 +1,440 @@
+---
+title: "Bayesian mixed-effects models with the *brms* package"
+output:
+  html_notebook:
+    highlight: tango
+    number_sections: yes
+    toc: yes
+    toc_float: no
+---
+
+```{r}
+knitr::opts_chunk$set(fig.width = 4,fig.height = 3)
+```
+
+
+The `brms` package allows to fit Bayesian generalized (non-)linear multivariate multilevel models. In this notebook, we will show you how to work with the `brms` package. We start with a linear regression example and continue with a multilevel model for repeated measurements. 
+
+If you encounter any problems, feel free to contact me:    
+<span style='color:blue'>ulf.mertens@psychologie.uni-heidelberg.de</span>
+
+```{r}
+packs = c('brms','haven','tidyverse','broom','ggmcmc','HDInterval')
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(packs,update=F,character.only = T)
+```
+
+```{r}
+for(p in packs) print(paste0(p, ' version: ',packageVersion(p)))
+```
+
+We use the example dataset from Chapter 5 of Hox: Multilevel Analysis - Techniques and Applications. Please take a look in the book if you are interested in more details.
+
+[Link to Amazon](https://www.amazon.de/Multilevel-Analysis-Applications-Quantitative-Methodology/dp/1138121363/ref=sr_1_1?ie=UTF8&qid=1534233473&sr=8-1&keywords=hox+multilevel)
+
+The following tutorial is inspired by the tutorial series on `brms` by Rens van de Schoot, see [here](https://www.rensvandeschoot.com/tutorials/brms/)
+
+"*The example data are a longitudinal data set from 200 college students. The students’
+grade point average (GPA) has been recorded for six successive semesters. At the same
+time, it was recorded whether the student held a job in that semester, and for how many
+hours. This is recorded in a variable ‘job’ (= hours worked). In this example, we also use
+the student-level variables high school GPA and gender (0 = male, 1 = female), which of
+course remain constant for each student across the six measurement occasions*" (Hox, 2010, p. 81)
+
+Level 1 variables (*semester-level*) are the gpa-score `gpa`, `semester` and `job`, level 2 variables (*student-level*) are `sex`, `highgpa` and `admitted`.
+
+```{r}
+df = read_sav(file='../data/gpa2long.sav')
+colnames(df)[2] = 'semester'
+head(df,12)
+```
+
+
+# Intercept-only model
+
+### The model
+
+For the simplest model, we try to predict the GPA score of a student with the gpa grand mean. However, we separate the error into two parts. A student-level error and a semester-level error.
+
+$$ gpa_{ti} = \pi_{0i} + \epsilon_{ti} $$
+
+with
+
+$$ \pi_{0i} = \beta_{00} + u_{0i} $$
+
+substituting:
+
+<span style='color:red'>$$ gpa_{ti} = (\beta_{00} + u_{0i}) + \epsilon_{ti} $$</span>
+
+<span style='color:red'>$u_{0i}$</span> is the subject-level error: 
+* how large is the error if we try to predict the gpa score of each student using the gpa grand mean.
+
+<span style='color:red'>$\epsilon_{ti}$</span> is the semester-level error:
+* how large is the error if we try to predict a gpa score at a specific semester using the gpa mean score for a student.
+
+In `brms`, it is really straightforward to fit bayesian multi-level models. If you have worked with `lme4` before, you will recognize many similarities. 
+
+## Fitting
+
+```{r}
+Formula = 'gpa ~ 1 + (1|student)'
+
+Warmup = 1000 # Discard the first 1000 samples
+Iter = 3000 # Save the remaining 2000 samples
+Chains = 2 # run two chains with different random initialisations
+
+null_model = brm(formula = Formula,
+                 data = df,
+                 sample_prior = 'yes', # store the prior samples
+                 save_all_pars = TRUE, # save parameters for BF calculation
+                 warmup=Warmup,
+                 iter=Iter,
+                 chains=Chains,
+                 file='../models/model_111') # save the model
+```
+
+
+```{r}
+summary(null_model)
+```
+
+**Group-Level Effects** shows the estimated value for the standard deviation of <span style='color:red'>$\sigma_{u_{0i}}$</span> which is 0.24. 
+
+**Population-Level Effects** shows the fixed effects parameters (in this case $\beta_{00}$, the grand mean) which is 2.87.
+
+**Family Specific Parameters** show <span style='color:red'>$\sigma_{\epsilon_{ti}}$</span>, 0.31.
+
+For each parameter, the 95% credible interval is also shown. For instance, we can see that there seems to be considerable variance among students since the 95%CI of <span style='color:red'>$\sigma_{u_{0i}}$</span> does not contain zero.
+
+
+Let's see another way on the parameters using `broom::tidy`. Here, we see how the parameter are actually called:
+
+All fixed effects have a `b_` before the actual name. Here, we only have the grand mean $\beta_{00}$ which is called `b_Intercept`. We have two additional parameters, namely the standard deviation of the student-level error (`sd_student__Intercept`) and the standard deviation of the semester-level error (`sigma`). 
+
+```{r}
+head(tidy(null_model))
+```
+
+## Specifying hypotheses
+
+### Intra-class correlation
+
+We can calculate the ICC (Intra-class correlation) as the ratio of group-level (student-level) variance to total variance. This gives us a hint if modeling the hierarchical structure in the data makes sense or put differently, if there is enough variation on the group-level.
+
+```{r}
+ICC = 0.24^2 / (0.24^2 + 0.31^2)
+print(paste0(round(ICC*100,2),'% of the total error variance is explained by group-level (level 2) variance.'))
+```
+
+In `brms`, it is also possible to specify hypotheses such as whether the ICC differs from zero.
+
+$$H_{0}: ICC = 0 $$
+
+Note how we can access specific parameters using the 'actual' names.
+
+```{r}
+hyp = "sd_student__Intercept^2 / (sd_student__Intercept^2 + sigma^2) = 0"
+hypothesis(null_model,hypothesis = hyp,class=NULL)
+```
+
+We see that the 95% CI of the ICC [0.31,0.44] does not contain zero. 
+
+## Examining predictions
+
+We can see that the model predicts a different gpa score for each participant but there is no variability in predictions within each student.
+
+```{r}
+preds0 = fitted(null_model)[,1]
+u = rep(as.numeric(apply(ranef(null_model,summary=F)$student[,,1],2,mean)),each=6)
+sigma = residuals(null_model)[,1]
+df_nm = cbind(df[,c('student','semester','gpa')],preds0,u,sigma)
+df_nm$grand_gpa = mean(df_nm$gpa)
+head(df_nm,12)
+```
+
+# Fixed level-1 predictor
+
+## The model
+
+We now add the semester-level (level-1) predictor `semester`. Instead of just predicting the mean gpa score of a student, we now use the information in which semester the student is to predict the gpa score. However, for the moment, we assume that the relationship of `semester` and `gpa` is equal for each student.
+
+$$ gpa_{ti} = \pi_{0i} + \pi_{1}semester_{ti} + \epsilon_{ti} $$
+
+with
+
+$$ \pi_{0i} = \beta_{00} + u_{0i} $$
+
+substituting:
+
+<span style='color:red'>$$ gpa_{ti} = (\beta_{00} + u_{0i}) +  \pi_{1}semester_{ti} + \epsilon_{ti} $$</span>
+
+$\beta_{00}$ is the overall mean gpa score for the first semester (semester=0).
+
+## Fitting
+
+```{r}
+Formula = 'gpa ~ 1 + semester + (1|student)'
+
+
+fixed1_model = brm(formula = Formula,
+                 data = df,
+                 sample_prior = 'yes', # store the prior samples
+                 save_all_pars = TRUE, # save parameters for BF calculation
+                 warmup=Warmup,
+                 iter=Iter,
+                 chains=Chains,
+                 file='../models/model_112') # save the model
+```
+
+```{r}
+summary(fixed1_model)
+```
+
+```{r}
+head(tidy(fixed1_model))
+```
+
+## Setting priors
+
+Instead of leaving the default prior settings, we can set our own prior distributions. We can see what priors we can change by calling the `get_prior` function. Probably the most interesting part is to set a new prior distribution for the regression coefficient of our predictor variable `semester`.
+
+```{r}
+get_prior(Formula, df)
+```
+
+We set new priors using `set_prior`. 
+
+```{r}
+prior1 = set_prior('normal(0,1)',class='b',coef='semester')
+```
+
+```{r}
+fixed1b_model = brm(formula = Formula,
+                 data = df,
+                 sample_prior = 'yes', # store the prior samples
+                 save_all_pars = TRUE, # save parameters for BF calculation
+                 warmup=Warmup,
+                 prior = prior1, 
+                 iter=Iter,
+                 chains=Chains,
+                 file='../models/model_112b') # save the model
+```
+
+We can get an overview of the prior distributions using prior_summary. Calling this functions lets us control if we set the prior correctly. As you see, this is the case here. We see that the effect of semester has indeed a standard normal prior.
+
+```{r}
+prior_summary(fixed1b_model)
+```
+
+If you decide to set you own priors which it advisable, you can easily plot prior and posterior distribution in one plot. Since the posterior is extremely peaked (almost no uncertainty), we cannot see the prior distribution here.
+
+```{r}
+plot(hypothesis(fixed1b_model, "semester > 0"))
+```
+
+## Examining predictions
+
+As you see below, now there is a now different prediction for each semester since we added a level-1 predictor. However, there is still only one random effect column, allowing each student to have a different gpa score in the first semester (semester = 0).
+
+```{r}
+preds1 = fitted(fixed1_model)[,1]
+u1 = rep(as.numeric(apply(ranef(fixed1_model,summary=F)$student[,,1],2,mean)),each=6)
+sigma = residuals(fixed1_model)[,1]
+df_sm = cbind(df[,c('student','semester','gpa')],preds1,u1,sigma)
+df_sm$grand_gpa = mean(df_sm$gpa)
+head(df_sm,12)
+```
+
+For student 1 in semester 0, the predicted value is:
+
+$$ gpa_{01} = (2.60 - 0.06946961) + (0.11 * 0)   $$
+
+For student 2 in semester 3, the predicted value is:
+
+$$ gpa_{32} = (2.60 - 0.21516797) + (0.11 * 3)   $$
+
+# Random level-1 predictor
+
+### The model
+
+In the following model, we allow the coefficient of `semester` to differ among students. 
+
+$$ gpa_{ti} = \pi_{0i} + \pi_{1i}semester_{ti} + \epsilon_{ti} $$
+
+with
+
+$$ \pi_{0i} = \beta_{00} + u_{0i} $$
+
+$$ \pi_{1i} = \beta_{10} + u_{1i} $$
+
+substituting:
+
+<span style='color:red'>$$ gpa_{ti} = (\beta_{00} + u_{0i}) + (\beta_{10} + u_{1i})semester_{ti} + \epsilon_{ti} $$</span>
+
+As you see, for every student, $u_{0i}$ estimates the amount of change in the overall slope $\beta_{10}$ to better capture the actual relation of `semester` and `gpa` within each student.
+
+## Fitting
+
+```{r}
+Formula = 'gpa ~ 1 + semester + (1 + semester|student)'
+
+random1_model = brm(formula = Formula,
+                 data = df,
+                 sample_prior = 'yes', # store the prior samples
+                 save_all_pars = TRUE, # save parameters for BF calculation
+                 warmup=Warmup,
+                 iter=Iter,
+                 chains=Chains,
+                 file='../models/model_113') # save the model
+```
+
+```{r}
+summary(random1_model)
+```
+
+We see that $\sigma(u_{1i})$ is 0.07 with the 95% CI not including zero. Therefore, we can conclude that there is non-negligible amount of variance in the relation of `semester` and `gpa` among the students. Let's see two other ways to check this:
+
+## Specifying hypotheses
+
+We can specify a hypothesis in `brms` as we already did above for the ICC to check if the random slope variance is 0 or not.
+
+```{r}
+hyp = "sd_student__semester = 0"
+hypothesis(random1_model,hypothesis = hyp,class=NULL)
+```
+
+## Plotting posterior distributions
+
+We can plot the posterior distribution of $\sigma(u_{1i})$ and add the 95% highest density interval. First, we get the chain results for each parameter using `ggs` function from the package `ggmcmc`. Note that the burn-in samples are not yet discarded.
+
+```{r}
+post_samples_u1 = posterior_samples(random1_model,pars='sd_student__semester')
+hdint = hdi(post_samples_u1$sd_student__semester)
+head(post_samples_u1)
+dim(post_samples_u1)
+```
+
+```{r}
+ggplot(post_samples_u1,aes(x=sd_student__semester))+
+    geom_histogram(colour='black')+
+    geom_vline(xintercept = hdint[1],color='red')+
+    geom_vline(xintercept = hdint[2],color='red')
+```
+
+## Examining predictions
+
+Just as with the other models, we append the predictions, random terms and residual error to the original dataset to get better insights in what the model is doing. Most importantly, we now have two random effects, namely the variation in the intercept and the variation in the slope.
+
+```{r}
+preds2 = fitted(random1_model)[,1]
+u20 = rep(as.numeric(apply(ranef(random1_model,summary=F)$student[,,1],2,mean)),each=6)
+u21 = rep(as.numeric(apply(ranef(random1_model,summary=F)$student[,,2],2,mean)),each=6)
+sigma = residuals(random1_model)[,1]
+df_rsm = cbind(df[,c('student','semester','gpa')],preds2,u20,u21,sigma)
+df_rsm$grand_gpa = mean(df_rsm$gpa)
+head(df_rsm,12)
+```
+
+
+Again, to better understand what's going on here, we try to understand what the actual predictions are.
+
+For student 1 in semester 0, the predicted value is:
+(2.60 - 0.1988711) + (0.11 + 0.059094151) * 0
+
+For student 2 in semester 3, the predicted value is:
+(2.60 - 0.2110465) + (0.11 -0.001828967) * 3
+
+We want to make sure that the model is actually doing what we expect. We pick the highest value of column `u21` first and see that student 77 has the highest value of `u21`.
+
+```{r}
+df_rsm %>% 
+    mutate(max_u21 = max(u21))  %>% 
+    filter(u21 == max_u21) %>% 
+    select(-max_u21)
+```
+
+```{r}
+df$Student = factor(if_else(df$student==77,'77','others'))
+ggplot(df,aes(x=semester,y=gpa))+
+    geom_point(color='gray')+
+    geom_smooth(method='lm',se=F,color='black')+
+    geom_point(data = df[df$Student=='77',],aes(x=semester,y=gpa),color='blue')+
+    geom_smooth(data = df[df$Student=='77',],method='lm',se=F,color='blue')+
+    labs(title='Student 77 in blue, others in black/grey')+
+    theme_classic()
+```
+
+We see that student 77 indeed has a more positive slope compared to the 'overall' slope.
+
+# Cross-level interaction
+
+## The model
+
+Next, we try to explain some variance in the slopes using the gender of each student `sex`. `sex` here is a level-2 (student-level) predictor variable which we incorporate at the student-level.
+
+$$ gpa_{ti} = \pi_{0i} + \pi_{1i}semester_{ti} + \epsilon_{ti} $$
+
+with
+
+$$ \pi_{0i} = \beta_{00} + \beta_{01}sex_{i} + u_{0i} $$
+
+$$ \pi_{1i} = \beta_{10} + \beta_{11}sex_{i} + u_{1i} $$
+
+substituting:
+
+<span style='color:red'>$$ gpa_{ti} = (\beta_{00} +  \beta_{01}sex_{i} + u_{0i}) + (\beta_{10} + \beta_{11}sex_{i} + u_{1i})semester_{ti} + \epsilon_{ti} $$</span>
+
+If we compare this model to the model above (`random1_model`), we see that not only is the relation of `semester` and `gpa` different for each student, but also, the relation is allowed to differ according to the gender of that student. Since this is an interaction (the relation of one variable and another changes with the levels of a third), where one variable is at level-1 (`semester`) and the moderator is at level-2 (`sex`), it is called _cross-level interaction_.
+
+## Fitting
+
+```{r}
+Formula = 'gpa ~ 1 + semester * sex + (1 + semester|student)'
+
+cl_model = brm(formula = Formula,
+                 data = df,
+                 sample_prior = 'yes', # store the prior samples
+                 save_all_pars = TRUE, # save parameters for BF calculation
+                 warmup=Warmup,
+                 iter=Iter,
+                 chains=Chains,
+                 file='../models/model_114') # save the model
+```
+
+```{r}
+summary(cl_model)
+```
+
+Let's try to make sense of the resulting regression coefficients:
+
+* `Intercept`: This is the mean gpa score for the first semester (semester = 0) and male students (sex = 0).
+* `semester`: This is the relationship of semester and gpa for all male students (sex = 0).
+* `sex`: This is the difference in male and female mean gpa score for the first semester. The mean gpa score for female students seems to be a bit higher (0.08).
+* `semester:sex`: This is the difference in the relationship between semester and gpa for male and female students. The slope of semester seems to be a bit higher for female students.
+
+## Examining predictions
+
+```{r}
+preds3 = fitted(cl_model)[,1]
+u20 = rep(as.numeric(apply(ranef(cl_model,summary=F)$student[,,1],2,mean)),each=6)
+u21 = rep(as.numeric(apply(ranef(cl_model,summary=F)$student[,,2],2,mean)),each=6)
+sigma = residuals(cl_model)[,1]
+df_rsm = cbind(df[,c('student','semester','gpa', 'sex')],preds3,u20,u21,sigma)
+df_rsm$grand_gpa = mean(df_rsm$gpa)
+head(df_rsm,12)
+```
+
+For student 1 (female) in semester 0, the predicted value is:
+(2.56 + 0.08 - 0.2377058)
+
+For student 2 (male) in semester 3, the predicted value is:
+(2.56 + 0 - 0.1733171) +  (0.09 + 0 + 0.01150153)* 3
+
+
+
+
+
+
+
+
+
