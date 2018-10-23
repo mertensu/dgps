@@ -1,26 +1,33 @@
 ######################################################################
-### Workshop DGPs 2018, Heidelberg                                 ###
-### Teil II Kapitel 1 Grundlagen R für Bayessches Hypothesentesten ###                               ###
+### Workshop DGPs 2018                                             ###
+### Teil II Kapitel 5 Grundlagen R für Bayessches Hypothesentesten ###                               
+### Momme v. Sydow                                                 ###
 ###                                                                ###
-### Die folgenden 10 Aufgaben ergänzen die Präsentation            ###                                        ###
+### Die folgenden 10 Aufgaben ergänzen die Präsentation            ###
 ######################################################################
 
-  # Mit den Pfeilen Links können Sie die Rubriken aufklappen.
-  # Falls Sie die Aufgabe selbst lösen wollen, nur die Instruktion am Anfang aufklappen.
-  # nicht die Lösungen. 
+  # Mit den Pfeilen links (bei den Zeilennummern) können Sie Rubriken aufklappen oder zuklappen.
+  # Falls diese geöffnet sind, schließen sie bitte alle Rubriken unterhalb dieser Anleitung, 
+  # um erstmal eine Übersicht zu gewinnen.
+  # Falls Sie Aufgabe selbst lösen wollen, sollten Sie nur die Instruktion am Anfang aufklappen,
+  # nicht aber die Lösungen. Manche der Aufgaben sollten Sie versuchen selbst zu lösen, bei anderen
+  # sollten Sie sich direkt die Lösung ansehen und diese abändern.
+  #
+  # Falls Sie noch Fehler im Code finden, lassen Sie es mich bitte wissen. 
+  
 
   ### AUFGABE 0, Initialisierung und Hilfe ####
+    #Mache dich während der anderen Aufgaben weiter mit den Befehlen vertraut. 
+    #Nutze insbesondere help()
 
   #Workspace leeren #
-    rm(list=ls())  #Clear Workspace                     
+    rm(list=ls())  #Clear Workspace - Löscht alle Objekte und Variablen im Arbeitsspeicher.                    
 
   # Hilfe #
-    help()     #Infos zu Befehlen, auch in RStudio über Help
+    help()     #Infos zu Befehlen, auch in RStudio über Help, etwa: help(plot).
     example()  #Beispiele für Befehlsverwendung
-    demo()     #Codebeispiele mit Grafikenfür Grafikbefehle
-    apropos()  #Funktionen die einen String enthalten.
-
-
+    demo()     #Codebeispiele mit Grafiken für Grafikbefehle
+    apropos()  #Funktionen, die einen String enthalten.
 
   ### AUFGABE 1, Rechnen (Präsentation Abschnitt 2.3): Binomialverteilung ####
     1*1  
@@ -57,7 +64,7 @@
     #==> Siehe Aufgabenstellung in Präsentation
     #    Berechne den Posterior (s.o.) nun für verschiedene Priori-Wahrscheinlichkeiten und 
     #    einen Vektor Priori Verteilungen.
-    #    Variere die Auflösung der Prior-Stufen
+    #    Variiere die Auflösung der Prior-Stufen
     ### Lösung Aufgabe 3 ####
       #Alles gleich wie in Aufgabe 2, nur die Priors nicht. Im dritten Fall haben wir einen Vektor
       #Prior Hypothese (Krankheit)
@@ -119,7 +126,7 @@
   ### AUFGABE 6, Pascalsches Dreieck - Linien in Schleife produzieren ####
     #Wir erinnern uns an n über k (und hier geben wir k von 0 bis 10 an.)
       choose(10, 0:10)    
-    #Drucke einige Linien aus dem Paskalschen Dreieick
+    #Drucke einige Linien aus dem Pascalschen Dreieick
     ### Lösung Aufgabe 6  ####
       #Leere Grafik
         plot(x=c(1,10), y=c(0,260), type = "n", xlab="x", ylab="y", main="Pascalsches Dreieck")
@@ -132,15 +139,26 @@
 
   ### AUFGABE 7, Normalverteilung ####  
     #Spiele mit Normalverteilung
-    help(rnorm)
-    #7,1 Typen von Verteilungsausgabewerten hier bei der Normalverteilung
-      plot(rnorm(n=1000, mean=0, sd=1))
-      qnorm(p=.95, mean=0, sd=1)
-      plot(dnorm(seq(-3,3,.1), mean = 0, sd = 1))
-      plot(pnorm(seq(-3,3,.1), mean = 0, sd = 1))
-  
+      help(rnorm)
+    #Lösung Aufgabe 7####
+    #7.1 Typen von Verteilungsausgabewerten hier bei der Normalverteilung
+      plot(rnorm(n=1000, mean=0, sd=1))           #rnorm
+      qnorm(p=.95, mean=0, sd=1)                  #qnorm
+      plot(dnorm(seq(-3,3,.1), mean = 0, sd = 1)) #dnorm
+      plot(pnorm(seq(-3,3,.1), mean = 0, sd = 1)) #pnorm
+      
     #7.2 Univariate Normalverteilung
-      #7.2.1  Histogramm 
+      #7.2.1 Dichte der Standard-Normalverteilung
+        x<-seq(-3,3,0.1)
+        y<-dnorm(x)
+        plot(x,y,type="l", 
+           main=expression(paste("Standard-Normalverteilung")),
+           ylim=c(0,.8), 
+           ylab="Wahrscheinlichkeitsdichte",
+           xlab=expression(paste("z"))
+        )
+      
+      #7.2.2  Histogramm 
         plot(rnorm(1000))
         plot(rnorm(1000)*rnorm(1000))
         hist(rnorm(1000))
@@ -148,7 +166,7 @@
         var1 <- rnorm(1000)
         plot(var1)
     
-      #7.2.2 Visualisierung Abweichung  Sample von einer Standard-NV
+      #7.2.3 Visualisierung Abweichung  Sample von einer Standard-NV
         hist(rnorm(1000), freq=FALSE, breaks=20)  #Histogramm
         curve(dnorm(x,mean=0,sd=1),col="red",add=TRUE) #Kurve
         mean(var1)
@@ -156,7 +174,7 @@
   ### AUFGABE 8, Abweichung Mittelwert in Normalverteilung (Schleife) ####
     #Rechnerische Abweichung Mean(Sample)-Mean(StandardNV) in Schleife
     ### Lösung Aufgabe 8 ####
-    #Anmerkung: Schöner und schneller als Schleifen sind of Vektoroperationen. Aber hier reicht erstmal eine übersichtlichere Schleife.
+    #Anmerkung: Schöner und schneller als Schleifen sind oft Vektoroperationen. Aber hier reicht erstmal eine übersichtlichere Schleife.
     Stichprobenzahl<-1
     Stichprobengrößemax <- 80
     Vektor_mean_means <- numeric(0) #Zurücksetzen leere numerische Variable
@@ -190,69 +208,87 @@
     
     
   ### AUFGABE 9, Binomiales Updaten mit konjugierter Beta-Verteilung ####
-    #Grafikparameter: Wieviele Grafiken
+    #Wie in Kapitel 3 dargelegt, geht es hier um ein Updaten ohne Integration nur aufgrund der Addition der a-, b-, k- und nk-Werte        
+    ### Lösung Aufgabe 9 ####
+    #Grafikparameter: Wieviele Grafiken?
       par(mfrow = c(1, 1)) #Grafikenanordnung: Zeilen, Spalten  
-      #par(mfrow = c(3, 1)) #Grafikenanordnung: Zeilen, Spalten  
+      par(mfrow = c(3, 1)) #Drei Grafiken untereinander, Prior, Likelihood, Posterior 
     
     #Eingabe Parameter 
       #Auflösung von theta (0 bis 1)
-        p<-seq(from=0,to=1,by=0.001)  # Auflösung der Wahrscheinlichkeit = 1001 Fälle, generative Wahrscheinlichkeiten bei der berechung der Priors/Likelihoods/Posteriors.
+        p<-seq(from=0,to=1,by=0.001)  # Auflösung der Wahrscheinlichkeit = 1001 Fälle, generative Wahrscheinlichkeiten bei der Berechnung der Priors/Likelihoods/Posteriors.
       #Beta-Prior (Eingabe)
-        a <- 19   #Alpha-Parameterder Beta-Verteilung
-        b <- 1    #Beta-Parameter der Beta-verteilung 
+        a <- 1   #Alpha-Parameterder Beta-Verteilung
+        b <- 19    #Beta-Parameter der Beta-verteilung 
       #Daten (Eingabe)
         k <- 6
         nk <- 4   #non-k oder n-k
-      #Plots
-        #Prior
-          #plot(theta,dbeta(p, shape1=a, shape2=b),type="l")  #Type="1" macht aus Punkten Linien
-        plot(theta,dbeta(p, shape1=a, shape2=b),type="l", xlab=bquote(paste(theta)), ylab=bquote(paste(italic("P"),"(", theta, ")")),  
+    #Plots
+      #Prior
+        #plot(theta,dbeta(p, shape1=a, shape2=b),type="l")  #Type="1" macht aus Punkten Linien
+        plot(p,dbeta(p, shape1=a, shape2=b),type="l", xlab=bquote(paste(theta)), ylab=bquote(paste(italic("P"),"(", theta, ")")),  
           main = bquote(paste("Prior: ", "Beta(", .(a), ",", .(b), "), ", italic(M), " = ", .(round(mean(p*dbeta(p,shape1=a, shape2=b)), 2)), sep="")))  #Type="1" macht aus Punkten Linien
-        #Likelihood
-          plot(p, dbinom(x=k, size=k+nk, prob=p), type="l",   xlab=bquote(paste(theta)), ylab=bquote(paste(italic("L"), "(", italic(D), "|", theta, ")")), 
+      #Likelihood
+        plot(p, dbinom(x=k, size=k+nk, prob=p), type="l",   xlab=bquote(paste(theta)), ylab=bquote(paste(italic("L"), "(", italic(D), "|", theta, ")")), 
            main = bquote(paste("Likelihood: ", "Bin(", italic("k"), " = ", .(k), ", non-", italic("k"), "= ", .(nk), "), ", italic("M"), " = ", .(round(mean(p*dbinom(x=k, size=k+nk, prob=p)/(sum(dbinom(x=k, size=k+nk, prob=p))/length(p))), 2)), sep="")))
-        #Posterior
-          plot(p,dbeta(p, shape1=a+k, shape2=b+nk),type="l", xlab=bquote(paste(theta)), ylab=bquote(paste(italic("P"),"(", theta, "|", italic("D"),")")),  
+      #Posterior
+        plot(p,dbeta(p, shape1=a+k, shape2=b+nk),type="l", xlab=bquote(paste(theta)), ylab=bquote(paste(italic("P"),"(", theta, "|", italic("D"),")")),  
            main = bquote(paste("Posterior: ", "Beta(", .(a+k), ",", .(b+nk), "), ", italic("M"), " = ", .(round(mean(p*dbeta(p,shape1=a+k, shape2=b+nk)), 2)), sep="")))  #Type="1" macht aus Punkten Linien
-    
-  ### AUFGABE 10, Bayesfaktoren ####
-    ###Parameter####
+      #Hilfe
+        help(dbeta)
+        
+  ### AUFGABE 10, Bayesfaktoren für den Binomialen Fall (vgl. Kapitel 4)####
+    #Im folgenden können Sie unter "Parameter" für die Priorverteilungen  von H1 und H2 jeweils a und b (für B(a,b)) 
+    #eingeben und auch die Daten: die beobachteten dichotomen Häufigkeiten k, non-k (Kopf/Zahl). 
+    #Sie können eine Null-Punkthypothese gegen eine Verteilungshypothese (etwa eine flache B(1,1) Verteilung)
+    #testen. Dies wäre der Standardfall. In der Lösung kann man sowohl H1 und auch H2 als eine Punkthypothese, oder auch als 
+    #Verteilungshypothese spezifizieren. Sie müssen dann unten aber auch dementsprechend den jeweiligen Code verwenden/aktivieren.
+    #Für beide Hs bestimmen Sie die marginalen Likelihood (Punktwert), P(D|M)=Integral(P(D|theta)P(theta|M))dtheta.        
+    #Graphisch wird zusätzlich P(D|theta) darstellen, was hier für beide Modelle gleich ist.    
+    #Siehe ausführlicher hierzu Kapitel 4 (4.4).
+    ### Lösung Aufgabe 10 ####
+      ###Parameter####
       #Daten
-        k = 9
-        n = 10
+        k = 6   #k (günstige Fälle, etwa "Kopf", bei Stichprobengröße n=k+nk )
+        nk = 4  #Non-k (etwa "Zahl")
       #Punkthypothesen
-        p1 =.5
-        #p2 =.6
-      #Verteilungen
+        p1 =.6     #H1
+        #p2 =.6    #H2
+      #Verteilungshypothesen
           N = 1000 #Zahl der Durchläufe
         #Betaverteilung H1
-          a1 = 1
-          b1 = 1
+          #a1 = 1
+          #b1 = 1
         #Betaverteilung H2
           a2 = 1
           b2 = 1
-    
-    ### Marginal Likelihood H1 ####
+
+          
+    #P(D|theta)  (ohne P(theta|M))
+        plot(p, dbinom(x=k, size=k+nk, prob=p), type="l",   xlab=bquote(paste(theta)), ylab=bquote(paste(italic("L"), "(", italic(D), "|", theta, ")")), 
+            main = bquote(paste("Likelihood: ", "Bin(", italic("k"), " = ", .(k), ", non-", italic("k"), "= ", .(nk), "), ", italic("M"), " = ", .(round(mean(p*dbinom(x=k, size=k+nk, prob=p)/(sum(dbinom(x=k, size=k+nk, prob=p))/length(p))), 2)), sep="")))
+          
+      ### Marginal Likelihood H1 ####
         
-      #Variante Punkthypothese (etwa Nullhypothese)
-        (MargLike_H1<-dbinom(x=k, size=n, p=p1))
+      #Variante Punkthypothese für H1 (etwa Nullhypothese)
+        (MargLike_H1<-dbinom(x=k, size=k+nk, p=p1))
           #points(.5, MargLike_H1, pch=16)
         
-      #Variante Verteilung 
-        ModelLike_H1_V<- numeric() #Leeren numerischen Vektor (sonst werden alte Daten miteinbezogen)
-        for(i in 1:N){
-          theta = rbeta(n = 1, a1, b1)
-          ModelLike_H1_V = c(ModelLike_H1_V, dbinom(x=k, size=n, p=theta)) #schneller wäre nicht alles zu speichern, sondern direkt die Summe zu nehmen und die am Ende durch N zu teilen.  
-        }
-        (MargLike_H1<-mean(ModelLike_H1_V))
-    ### Marginal Likelihood H2 ####
+      #Variante Verteilung für H1 
+        #ModelLike_H1_V<- numeric() #Leeren numerischen Vektor (sonst werden alte Daten miteinbezogen)
+        #for(i in 1:N){
+        #  theta = rbeta(n = 1, a1, b1)
+        #  ModelLike_H1_V = c(ModelLike_H1_V, dbinom(x=k, size=k+nk, p=theta)) #schneller wäre nicht alles zu speichern, sondern direkt die Summe zu nehmen und die am Ende durch N zu teilen.  
+        #}
+        #(MargLike_H1<-mean(ModelLike_H1_V))
+      ### Marginal Likelihood H2 ####
         #Variante Punkthypothese (etwa Nullhypothese)
-          #(MargLike_H2<-dbinom(x=6, size=10, p=.6))
+          #(MargLike_H2<-dbinom(x=k, size=k+nk, p=p2))
         #Variante Verteilung 
           ModelLike_H2_V <- numeric() #Leeren numerischen Vektor
           for(i in 1:N){
             theta = rbeta(n = 1, a2, b2)
-            ModelLike_H2_V = c(ModelLike_H2_V, dbinom(x=k, size=n, p=theta))
+            ModelLike_H2_V = c(ModelLike_H2_V, dbinom(x=k, size=k+nk, p=theta))
           }
           (MargLike_H2<-mean(ModelLike_H2_V))
     ### Bayesfaktor ###

@@ -363,4 +363,3 @@ Separate also by `treatment`.
 my_plot4 + geom_histogram(binwidth = 1,colour='black') + 
   facet_grid(treatment~gender)
 ```
-

@@ -3,10 +3,9 @@ title: "Bayes factor tutorial"
 output:
   html_notebook:
     highlight: tango
-    number_sections: no
-    theme: spacelab
+    number_sections: yes
     toc: yes
-    toc_float: yes
+    toc_float: no
 ---
 
 # A little tutorial on the Bayes factor
